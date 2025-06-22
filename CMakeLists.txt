@@ -478,9 +478,33 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     # disable min define to allow usage of std::min
     add_definitions(-DNOMINMAX)
 else()
-    # activate sse2 and aes-ni
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2 -maes")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2 -maes")
+    # Check for SSE2 and AES-NI support
+    include(CheckCXXCompilerFlag)
+    include(CheckCCompilerFlag)
+    
+    # Check if compiler supports SSE2
+    check_cxx_compiler_flag("-msse2" COMPILER_SUPPORTS_SSE2_CXX)
+    check_c_compiler_flag("-msse2" COMPILER_SUPPORTS_SSE2_C)
+    
+    # Check if compiler supports AES-NI
+    check_cxx_compiler_flag("-maes" COMPILER_SUPPORTS_AES_CXX)
+    check_c_compiler_flag("-maes" COMPILER_SUPPORTS_AES_C)
+    
+    # Only add SSE2 flag if supported
+    if(COMPILER_SUPPORTS_SSE2_CXX)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2")
+    endif()
+    if(COMPILER_SUPPORTS_SSE2_C)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2")
+    endif()
+    
+    # Only add AES-NI flag if supported
+    if(COMPILER_SUPPORTS_AES_CXX)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -maes")
+    endif()
+    if(COMPILER_SUPPORTS_AES_C)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -maes")
+    endif()
 endif()
 
 # add -Wall for debug builds with gcc
