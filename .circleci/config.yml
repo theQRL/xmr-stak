@@ -5,7 +5,7 @@ jobs:
       - image: qrledger/qrl-docker-ci:noble
     steps:
       - checkout
-      - run: sudo apt-get install libssl-dev
+      - run: sudo sudo apt-get update && sudo apt-get install libssl-dev
       # TODO: openssl into docker ci helper
       - run: cmake . -DCUDA_ENABLE=OFF -DOpenCL_ENABLE=OFF -DMICROHTTPD_ENABLE=OFF
       - run: make
