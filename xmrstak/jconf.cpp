@@ -45,26 +45,21 @@
 #include <cpuid.h>
 #else
 // Fallback inline assembly implementation if cpuid.h is not available
-static inline void __cpuid_count(unsigned int eax, unsigned int ecx, unsigned int* a, unsigned int* b, unsigned int* c, unsigned int* d) {
-	unsigned int reg_a, reg_b, reg_c, reg_d;
+static inline void __cpuid_count(unsigned int eax, unsigned int ecx, unsigned int& a, unsigned int& b, unsigned int& c, unsigned int& d) {
 #ifdef __x86_64__
-	asm volatile("cpuid" : "=a" (reg_a), "=b" (reg_b), "=c" (reg_c), "=d" (reg_d) : "a" (eax), "c" (ecx));
+	asm volatile("cpuid" : "=a" (a), "=b" (b), "=c" (c), "=d" (d) : "a" (eax), "c" (ecx));
 #else
 	// For 32-bit x86, we need to save ebx register
 	asm volatile("xchgl %%ebx, %1; cpuid; xchgl %%ebx, %1" 
-		: "=a" (reg_a), "=r" (reg_b), "=c" (reg_c), "=d" (reg_d) : "a" (eax), "c" (ecx));
+		: "=a" (a), "=r" (b), "=c" (c), "=d" (d) : "a" (eax), "c" (ecx));
 #endif
-	*a = reg_a;
-	*b = reg_b;
-	*c = reg_c;
-	*d = reg_d;
 }
 #endif
 #else
 #define strcasecmp strcasecmp
 // Stub implementation for non-x86 architectures
-static inline void __cpuid_count(unsigned int eax, unsigned int ecx, unsigned int* a, unsigned int* b, unsigned int* c, unsigned int* d) {
-	*a = *b = *c = *d = 0;
+static inline void __cpuid_count(unsigned int eax, unsigned int ecx, unsigned int& a, unsigned int& b, unsigned int& c, unsigned int& d) {
+	a = b = c = d = 0;
 }
 #endif
 
@@ -321,7 +316,7 @@ void jconf::cpuid(uint32_t eax, int32_t ecx, int32_t val[4])
 #else
 	// Use temporary unsigned int variables for __cpuid_count
 	unsigned int a, b, c, d;
-	__cpuid_count(eax, ecx, &a, &b, &c, &d);
+	__cpuid_count(eax, ecx, a, b, c, d);
 	val[0] = (int32_t)a;
 	val[1] = (int32_t)b;
 	val[2] = (int32_t)c;
