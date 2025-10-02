@@ -1,10 +1,11 @@
-# HowTo Use xmr-stak
+# HowTo Use Xmr-Stak
 
 ## Content Overview
-* [Configuration](#configuration)
+* [Configurations](#configurations)
 * [Usage on Windows](#usage-on-windows)
-* [Usage on Linux](#usage-on-linux)
+* [Usage on Linux & macOS](#usage-on-linux--macos)
 * [Command Line Options](#command-line-options)
+* [Use different backends](#use-different-backends)
 * [HTML and JSON API report configuraton](#html-and-json-api-report-configuraton)
 
 ## Configurations
@@ -34,6 +35,32 @@ Note: If the pool is ignoring the option `rig_id` in `pools.txt` to name your wo
 The miner allow to overwrite some of the settings via command line options.
 Run `xmr-stak --help` to show all available command line options.
 
+## Use Different Backends
+
+On linux and OSX please add `./` before the binary name `xmr-stak`.
+
+### CPU Only:
+```
+xmr-stak --noAMD --noNVIDIA
+```
+
+### NVIDIA/AMD Only:
+
+The miner will automatically detect if CUDA (for NVIDIA GPUs) or OpenCL (for AMD GPUs) is available.
+
+```
+xmr-stak --noCPU
+```
+
+### NVIDIA via OpenCL
+
+It is possible to use the OpenCl backend which is originally created for AMD GPUs with NVIDIA GPus.
+Some NVIDIA GPUs can reach better performance with this backend.
+
+```
+xmr-stak --openCLVendor NVIDIA --noNVIDIA
+```
+
 ## Docker image usage
 
 You can run the Docker image the following way:
@@ -50,6 +77,6 @@ Debug the docker image by getting inside:
 docker run --entrypoint=/bin/bash --rm -it -u $(id -u):$(id -g) --name fireice-uk/xmr-stak -v "$PWD":/mnt xmr-stak
 ```
 
-## HTML and JSON API report configuraton
+## HTML and JSON API report configuration
 
 To configure the reports shown on the [README](../README.md) side you need to edit the httpd_port variable. Then enable wifi on your phone and navigate to [miner ip address]:[httpd_port] in your phone browser. If you want to use the data in scripts, you can get the JSON version of the data at url [miner ip address]:[httpd_port]/api.json

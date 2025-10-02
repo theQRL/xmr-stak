@@ -10,6 +10,7 @@ config-debug.txt
 
 # tmp files
 *~
+CMakeFiles/
 
 # merge original backup files
 *.orig
@@ -22,3 +23,11 @@ xmr-stak.kdev4
 cmake-build-release/
 cmake-build-debug/
 \.idea/
+
+# MacOS files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*

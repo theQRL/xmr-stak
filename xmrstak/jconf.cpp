@@ -26,36 +26,71 @@
 
 #include "xmrstak/misc/console.hpp"
 #include "xmrstak/misc/jext.hpp"
-#include "xmrstak/misc/console.hpp"
 #include "xmrstak/misc/utility.hpp"
 
+#include <algorithm>
+#include <math.h>
+#include <numeric>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include <vector>
-#include <numeric>
-#include <algorithm>
 
 #ifdef _WIN32
 #define strcasecmp _stricmp
 #include <intrin.h>
-#else
+#elif defined(__x86_64__) || defined(__i386__)
+// Only include cpuid.h on x86/x86_64 architectures if available
+#if __has_include(<cpuid.h>)
 #include <cpuid.h>
+#else
+// Fallback inline assembly implementation if cpuid.h is not available
+static inline void __cpuid_count(unsigned int eax, unsigned int ecx, unsigned int* a, unsigned int* b, unsigned int* c, unsigned int* d) {
+#ifdef __x86_64__
+	asm volatile("cpuid" : "=a" (*a), "=b" (*b), "=c" (*c), "=d" (*d) : "a" (eax), "c" (ecx));
+#else
+	// For 32-bit x86, we need to save ebx register
+	asm volatile("xchgl %%ebx, %1; cpuid; xchgl %%ebx, %1" 
+		: "=a" (*a), "=r" (*b), "=c" (*c), "=d" (*d) : "a" (eax), "c" (ecx));
 #endif
-
+}
+#endif
+#else
+#define strcasecmp strcasecmp
+// Stub implementation for non-x86 architectures
+static inline void __cpuid_count(unsigned int eax, unsigned int ecx, unsigned int* a, unsigned int* b, unsigned int* c, unsigned int* d) {
+	*a = *b = *c = *d = 0;
+}
+#endif
 
 using namespace rapidjson;
 
 /*
  * This enum needs to match index in oConfigValues, otherwise we will get a runtime error
  */
-enum configEnum {
-	aPoolList, sCurrency, bTlsSecureAlgo, iCallTimeout, iNetRetry, iGiveUpLimit, iVerboseLevel, bPrintMotd, iAutohashTime, 
-	bFlushStdout, bDaemonMode, sOutputFile, iHttpdPort, sHttpLogin, sHttpPass, bPreferIpv4, bAesOverride, sUseSlowMem 
+enum configEnum
+{
+	aPoolList,
+	sCurrency,
+	bTlsSecureAlgo,
+	iCallTimeout,
+	iNetRetry,
+	iGiveUpLimit,
+	iVerboseLevel,
+	bPrintMotd,
+	iAutohashTime,
+	bDaemonMode,
+	sOutputFile,
+	iHttpdPort,
+	sHttpLogin,
+	sHttpPass,
+	bPreferIpv4,
+	bAesOverride,
+	sUseSlowMem
 };
 
-struct configVal {
+struct configVal
+{
 	configEnum iName;
 	const char* sName;
 	Type iType;
@@ -64,50 +99,61 @@ struct configVal {
 // Same order as in configEnum, as per comment above
 // kNullType means any type
 configVal oConfigValues[] = {
-	{ aPoolList, "pool_list", kArrayType },
-	{ sCurrency, "currency", kStringType },
-	{ bTlsSecureAlgo, "tls_secure_algo", kTrueType },
-	{ iCallTimeout, "call_timeout", kNumberType },
-	{ iNetRetry, "retry_time", kNumberType },
-	{ iGiveUpLimit, "giveup_limit", kNumberType },
-	{ iVerboseLevel, "verbose_level", kNumberType },
-	{ bPrintMotd, "print_motd", kTrueType },
-	{ iAutohashTime, "h_print_time", kNumberType },
-	{ bFlushStdout, "flush_stdout", kTrueType},
-	{ bDaemonMode, "daemon_mode", kTrueType },
-	{ sOutputFile, "output_file", kStringType },
-	{ iHttpdPort, "httpd_port", kNumberType },
-	{ sHttpLogin, "http_login", kStringType },
-	{ sHttpPass, "http_pass", kStringType },
-	{ bPreferIpv4, "prefer_ipv4", kTrueType },
-	{ bAesOverride, "aes_override", kNullType },
-	{ sUseSlowMem, "use_slow_memory", kStringType }
-};
+	{aPoolList, "pool_list", kArrayType},
+	{sCurrency, "currency", kStringType},
+	{bTlsSecureAlgo, "tls_secure_algo", kTrueType},
+	{iCallTimeout, "call_timeout", kNumberType},
+	{iNetRetry, "retry_time", kNumberType},
+	{iGiveUpLimit, "giveup_limit", kNumberType},
+	{iVerboseLevel, "verbose_level", kNumberType},
+	{bPrintMotd, "print_motd", kTrueType},
+	{iAutohashTime, "h_print_time", kNumberType},
+	{bDaemonMode, "daemon_mode", kTrueType},
+	{sOutputFile, "output_file", kStringType},
+	{iHttpdPort, "httpd_port", kNumberType},
+	{sHttpLogin, "http_login", kStringType},
+	{sHttpPass, "http_pass", kStringType},
+	{bPreferIpv4, "prefer_ipv4", kTrueType},
+	{bAesOverride, "aes_override", kNullType},
+	{sUseSlowMem, "use_slow_memory", kStringType}};
 
-constexpr size_t iConfigCnt = (sizeof(oConfigValues)/sizeof(oConfigValues[0]));
+constexpr size_t iConfigCnt = (sizeof(oConfigValues) / sizeof(oConfigValues[0]));
 
 xmrstak::coin_selection coins[] = {
 	// name, userpool, devpool, default_pool_suggestion
-	{ "aeon7",               {cryptonight_aeon, cryptonight_lite, 7u},     {cryptonight_aeon, cryptonight_lite, 7u},     "mine.aeon-pool.com:5555" },
-	{ "bbscoin",             {cryptonight_monero, cryptonight, 3u},        {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "croat",               {cryptonight_monero, cryptonight, 255u},      {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "cryptonight",         {cryptonight_monero, cryptonight, 255u},      {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "cryptonight_heavy",   {cryptonight_heavy, cryptonight_heavy, 0u},   {cryptonight_heavy, cryptonight_heavy, 0u},   nullptr },
-	{ "cryptonight_lite",    {cryptonight_aeon, cryptonight_lite, 255u},   {cryptonight_aeon, cryptonight_lite, 7u},     nullptr },
-	{ "cryptonight_lite_v7", {cryptonight_lite, cryptonight_aeon, 255u},   {cryptonight_aeon, cryptonight_lite, 7u},     nullptr },
-	{ "cryptonight_v7",      {cryptonight_monero, cryptonight_monero, 0u}, {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "edollar",             {cryptonight_monero, cryptonight, 255u},      {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "electroneum",         {cryptonight_monero, cryptonight, 255u},      {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "graft",               {cryptonight_monero, cryptonight, 8u},        {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "haven",               {cryptonight_heavy, cryptonight, 2u},         {cryptonight_heavy, cryptonight_heavy, 0u},   nullptr },
-	{ "intense",             {cryptonight_monero, cryptonight, 4u},        {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "karbo",               {cryptonight_monero, cryptonight, 255u},      {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "monero7",             {cryptonight_monero, cryptonight_monero, 0u}, {cryptonight_monero, cryptonight_monero, 0u}, "pool.usxmrpool.com:3333" },
-	{ "stellite",            {cryptonight_monero, cryptonight, 3u},        {cryptonight_monero, cryptonight_monero, 0u}, nullptr },
-	{ "sumokoin",            {cryptonight_heavy, cryptonight_heavy, 0u},   {cryptonight_heavy, cryptonight_heavy, 0u},   nullptr }
-};
+	{"bbscoin", {POW(cryptonight_aeon)}, {POW(cryptonight_aeon)}, nullptr},
+	{"bittube", {POW(cryptonight_bittube2)}, {POW(cryptonight_gpu)}, "mining.bit.tube:13333"},
+	{"cryptonight", {POW(cryptonight)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_bittube2", {POW(cryptonight_bittube2)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_masari", {POW(cryptonight_masari)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_haven", {POW(cryptonight_haven)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_heavy", {POW(cryptonight_heavy)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_lite", {POW(cryptonight_lite)}, {POW(cryptonight_aeon)}, nullptr},
+	{"cryptonight_lite_v7", {POW(cryptonight_aeon)}, {POW(cryptonight_aeon)}, nullptr},
+	{"cryptonight_lite_v7_xor", {POW(cryptonight_ipbc)}, {POW(cryptonight_aeon)}, nullptr},
+	{"cryptonight_r", {POW(cryptonight_r)}, {POW(cryptonight_r)}, nullptr},
+	{"cryptonight_superfast", {POW(cryptonight_superfast)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_turtle", {POW(cryptonight_turtle)}, {POW(cryptonight_turtle)}, nullptr},
+	{"cryptonight_v7", {POW(cryptonight_monero)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_v8", {POW(cryptonight_monero_v8)}, {POW(cryptonight_r)}, nullptr},
+	{"cryptonight_v8_double", {POW(cryptonight_v8_double)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_v8_half", {POW(cryptonight_v8_half)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_v8_reversewaltz", {POW(cryptonight_v8_reversewaltz)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_v8_zelerius", {POW(cryptonight_v8_zelerius)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_v7_stellite", {POW(cryptonight_stellite)}, {POW(cryptonight_gpu)}, nullptr},
+	{"cryptonight_gpu", {POW(cryptonight_gpu)}, {POW(cryptonight_gpu)}, "pool.ryo-currency.com:3333"},
+	{"cryptonight_conceal", {POW(cryptonight_conceal)}, {POW(cryptonight_gpu)}, nullptr},
+	{"graft", {POW(cryptonight_v8_reversewaltz), 12, POW(cryptonight_monero_v8)}, {POW(cryptonight_gpu)}, nullptr},
+	{"haven", {POW(cryptonight_haven)}, {POW(cryptonight_gpu)}, nullptr},
+	{"lethean", {POW(cryptonight_r)}, {POW(cryptonight_r)}, nullptr},
+	{"masari", {POW(cryptonight_v8_half)}, {POW(cryptonight_gpu)}, nullptr},
+	{"qrl", {POW(cryptonight_monero)}, {POW(cryptonight_gpu)}, nullptr},
+	{"ryo", {POW(cryptonight_gpu)}, {POW(cryptonight_gpu)}, "pool.ryo-currency.com:3333"},
+	{"torque", {POW(cryptonight_v8_half)}, {POW(cryptonight_gpu)}, nullptr},
+	{"plenteum", {POW(cryptonight_turtle)}, {POW(cryptonight_turtle)}, nullptr},
+	{"zelerius", {POW(cryptonight_v8_zelerius), 7, POW(cryptonight_monero_v8)}, {POW(cryptonight_gpu)}, nullptr}};
 
-constexpr size_t coin_alogo_size = (sizeof(coins)/sizeof(coins[0]));
+constexpr size_t coin_algo_size = (sizeof(coins) / sizeof(coins[0]));
 
 inline bool checkType(Type have, Type want)
 {
@@ -224,7 +270,10 @@ bool jconf::PrintMotd()
 
 uint64_t jconf::GetAutohashTime()
 {
-	return prv->configValues[iAutohashTime]->GetUint64();
+	if (xmrstak::params::inst().h_print_time == -1)
+		return prv->configValues[iAutohashTime]->GetUint64();
+	else
+		return uint64_t(xmrstak::params::inst().h_print_time);
 }
 
 uint16_t jconf::GetHttpdPort()
@@ -252,17 +301,20 @@ bool jconf::DaemonMode()
 
 const char* jconf::GetOutputFile()
 {
-	return prv->configValues[sOutputFile]->GetString();
+	if(xmrstak::params::inst().outputFile.length() > 0)
+		return xmrstak::params::inst().outputFile.c_str();
+	else
+		return prv->configValues[sOutputFile]->GetString();
 }
 
 void jconf::cpuid(uint32_t eax, int32_t ecx, int32_t val[4])
 {
-	memset(val, 0, sizeof(int32_t)*4);
+	memset(val, 0, sizeof(int32_t) * 4);
 
 #ifdef _WIN32
 	__cpuidex(val, eax, ecx);
 #else
-	__cpuid_count(eax, ecx, val[0], val[1], val[2], val[3]);
+	__cpuid_count(eax, ecx, (unsigned int*)&val[0], (unsigned int*)&val[1], (unsigned int*)&val[2], (unsigned int*)&val[3]);
 #endif
 }
 
@@ -308,7 +360,7 @@ std::string jconf::GetMiningCoin()
 void jconf::GetAlgoList(std::string& list)
 {
 	list.reserve(256);
-	for(size_t i=0; i < coin_alogo_size; i++)
+	for(size_t i = 0; i < coin_algo_size; i++)
 	{
 		list += "\t- ";
 		list += coins[i].coin_name;
@@ -319,15 +371,8 @@ void jconf::GetAlgoList(std::string& list)
 bool jconf::IsOnAlgoList(std::string& needle)
 {
 	std::transform(needle.begin(), needle.end(), needle.begin(), ::tolower);
-	
-	if(needle == "monero")
-	{
-		printer::inst()->print_msg(L0, "You entered Monero as coin name. Monero will hard-fork the PoW.\nThis means it will stop being compatible with other cryptonight coins.\n"
-			"Please use 'monero7' (support auto switch to new POW) if you want to mine Monero, \nor name the coin that you want to mine.");
-		return false;
-	}
 
-	for(size_t i=0; i < coin_alogo_size; i++)
+	for(size_t i = 0; i < coin_algo_size; i++)
 	{
 		if(needle == coins[i].coin_name)
 			return true;
@@ -338,8 +383,8 @@ bool jconf::IsOnAlgoList(std::string& needle)
 const char* jconf::GetDefaultPool(const char* needle)
 {
 	const char* default_example = "pool.example.com:3333";
-	
-	for(size_t i=0; i < coin_alogo_size; i++)
+
+	for(size_t i = 0; i < coin_algo_size; i++)
 	{
 		if(strcmp(needle, coins[i].coin_name) == 0)
 		{
@@ -355,22 +400,22 @@ const char* jconf::GetDefaultPool(const char* needle)
 
 bool jconf::parse_file(const char* sFilename, bool main_conf)
 {
-	FILE * pFile;
-	char * buffer;
+	FILE* pFile;
+	char* buffer;
 	size_t flen;
 
 	pFile = fopen(sFilename, "rb");
-	if (pFile == NULL)
+	if(pFile == NULL)
 	{
 		printer::inst()->print_msg(L0, "Failed to open config file %s.", sFilename);
 		return false;
 	}
 
-	fseek(pFile,0,SEEK_END);
+	fseek(pFile, 0, SEEK_END);
 	flen = ftell(pFile);
 	rewind(pFile);
 
-	if(flen >= 64*1024)
+	if(flen >= 64 * 1024)
 	{
 		fclose(pFile);
 		printer::inst()->print_msg(L0, "Oversized config file - %s.", sFilename);
@@ -385,7 +430,7 @@ bool jconf::parse_file(const char* sFilename, bool main_conf)
 	}
 
 	buffer = (char*)malloc(flen + 3);
-	if(fread(buffer+1, flen, 1, pFile) != 1)
+	if(fread(buffer + 1, flen, 1, pFile) != 1)
 	{
 		free(buffer);
 		fclose(pFile);
@@ -409,7 +454,7 @@ bool jconf::parse_file(const char* sFilename, bool main_conf)
 
 	Document& root = main_conf ? prv->jsonDoc : prv->jsonDocPools;
 
-	root.Parse<kParseCommentsFlag|kParseTrailingCommasFlag>(buffer, flen+2);
+	root.Parse<kParseCommentsFlag | kParseTrailingCommasFlag>(buffer, flen + 2);
 	free(buffer);
 
 	if(root.HasParseError())
@@ -503,21 +548,21 @@ bool jconf::parse_config(const char* sFilename, const char* sFilenamePools)
 	std::vector<size_t> pool_weights;
 	pool_weights.reserve(pool_cnt);
 
-	const char* aPoolValues[] = { "pool_address", "wallet_address", "rig_id", "pool_password", "use_nicehash", "use_tls", "tls_fingerprint", "pool_weight" };
-	Type poolValTypes[] = { kStringType, kStringType, kStringType, kStringType, kTrueType, kTrueType, kStringType, kNumberType };
+	const char* aPoolValues[] = {"pool_address", "wallet_address", "rig_id", "pool_password", "use_nicehash", "use_tls", "tls_fingerprint", "pool_weight"};
+	Type poolValTypes[] = {kStringType, kStringType, kStringType, kStringType, kTrueType, kTrueType, kStringType, kNumberType};
 
-	constexpr size_t pvcnt = sizeof(aPoolValues)/sizeof(aPoolValues[0]);
-	for(uint32_t i=0; i < pool_cnt; i++)
+	constexpr size_t pvcnt = sizeof(aPoolValues) / sizeof(aPoolValues[0]);
+	for(uint32_t i = 0; i < pool_cnt; i++)
 	{
 		const Value& oThdConf = prv->configValues[aPoolList]->GetArray()[i];
-		
+
 		if(!oThdConf.IsObject())
 		{
 			printer::inst()->print_msg(L0, "Invalid config file. pool_list must contain objects.");
 			return false;
 		}
 
-		for(uint32_t j=0; j < pvcnt; j++)
+		for(uint32_t j = 0; j < pvcnt; j++)
 		{
 			const Value* v;
 			if((v = GetObjectMember(oThdConf, aPoolValues[j])) == nullptr)
@@ -600,16 +645,6 @@ bool jconf::parse_config(const char* sFilename, const char* sFilenamePools)
 	}
 #endif // _WIN32
 
-	if (prv->configValues[bFlushStdout]->IsBool())
-	{
-		bool bflush = prv->configValues[bFlushStdout]->GetBool();
-		printer::inst()->set_flush_stdout(bflush);
-		if (bflush)
-		{
-			printer::inst()->print_msg(L0, "Flush stdout forced.");
-		}
-	}
-
 	std::string ctmp = GetMiningCoin();
 	std::transform(ctmp.begin(), ctmp.end(), ctmp.begin(), ::tolower);
 
@@ -619,15 +654,8 @@ bool jconf::parse_config(const char* sFilename, const char* sFilenamePools)
 		return false;
 	}
 
-	for(size_t i=0; i < coin_alogo_size; i++)
+	for(size_t i = 0; i < coin_algo_size; i++)
 	{
-		if(ctmp == "monero")
-		{
-			printer::inst()->print_msg(L0, "You entered Monero as coin name. Monero will hard-fork the PoW.\nThis means it will stop being compatible with other cryptonight coins.\n"
-				"Please use monero7 (support auto switch to new POW) if you want to mine Monero, or name the coin that you want to mine.");
-			return false;
-		}
-
 		if(ctmp == coins[i].coin_name)
 		{
 			currentCoin = coins[i];
