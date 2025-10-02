@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: qrledger/qrl-docker:noble
+      - image: qrledger/qrl-docker-ci:noble
     steps:
       - checkout
       - run: cmake .
