@@ -1,7 +1,15 @@
 #include "../../cryptonight.hpp"
 #include "cn_gpu.hpp"
 
-#pragma GCC target("avx2")
+// Only compile AVX code on x86/x86_64 architectures
+#if !defined(__aarch64__) && !defined(__arm__) && (defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86))
+
+#include <immintrin.h>
+#include <xmmintrin.h>  // SSE
+#include <emmintrin.h>  // SSE2
+#include <pmmintrin.h>  // SSE3
+#include <smmintrin.h>  // SSE4.1
+
 #ifndef _mm256_bslli_epi128
 #define _mm256_bslli_epi128(a, count) _mm256_slli_si256((a), (count))
 #endif
@@ -175,7 +183,9 @@ void cn_gpu_inner_avx(const uint8_t* spad, uint8_t* lpad, const xmrstak_algo& al
 		sum = _mm_div_ps(sum, _mm_set1_ps(64.0f));
 		sum0 = _mm256_insertf128_ps(_mm256_castps128_ps256(sum), sum, 1);
 		uint32_t n = _mm_cvtsi128_si32(v0);
-		idx0 = scratchpad_ptr(lpad, n, 0, mask);
-		idx2 = scratchpad_ptr(lpad, n, 2, mask);
+	idx0 = scratchpad_ptr(lpad, n, 0, mask);
+	idx2 = scratchpad_ptr(lpad, n, 2, mask);
 	}
 }
+
+#endif // !defined(__aarch64__) && !defined(__arm__) && (defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86))

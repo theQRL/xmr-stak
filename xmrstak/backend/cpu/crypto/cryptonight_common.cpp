@@ -37,11 +37,26 @@ extern "C"
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef __GNUC__
+#ifdef _WIN32
+#include <malloc.h>
+#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
 #include <mm_malloc.h>
 #else
-#include <malloc.h>
-#endif // __GNUC__
+#include <stdlib.h>
+
+// Compatibility functions for non-x86 or systems without mm_malloc.h
+static inline void* _mm_malloc(size_t size, size_t alignment)
+{
+	void* ptr;
+	int result = posix_memalign(&ptr, alignment, size);
+	return (result == 0) ? ptr : NULL;
+}
+
+static inline void _mm_free(void* ptr)
+{
+	free(ptr);
+}
+#endif
 
 #if defined(__APPLE__)
 #include <mach/vm_statistics.h>

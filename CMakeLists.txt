@@ -477,6 +477,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     add_definitions(-D_CRT_SECURE_NO_DEPRECATE)
     # disable min define to allow usage of std::min
     add_definitions(-DNOMINMAX)
+endif()
+
+# Check for ARM architecture and disable CryptonightR optimizations
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm.*|aarch64.*)")
+    message(STATUS "ARM architecture detected - disabling CryptonightR optimizations")
+    add_definitions(-DDISABLE_CRYPTONIGHTR)
+    add_definitions(-DDISABLE_ASM)
+    set(ASM_DISABLED TRUE)
 else()
     # Check for SSE2 and AES-NI support
     include(CheckCXXCompilerFlag)
@@ -506,8 +514,6 @@ else()
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -maes")
     endif()
 endif()
-
-# add -Wall for debug builds with gcc
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
@@ -534,33 +540,35 @@ if(CMAKE_LINK_STATIC)
     endif()
 endif()
 
-if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
-    # asm optimized monero v8 code
-    enable_language(ASM_MASM)
-    set_property(SOURCE "xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.asm" PROPERTY ASM_MASM)
-    set_property(SOURCE "xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.asm" PROPERTY ASM_MASM)
-    add_library(xmr-stak-asm
-        STATIC
-        "xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.asm"
-        "xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.asm"
-    )
+if(ASM_DISABLED)
+    # Create a stub implementation for builds without assembly support
+    message(STATUS "ASM disabled - using stub implementation")
+    file(WRITE "${CMAKE_BINARY_DIR}/asm_stub.c" "// Stub file for builds without assembly support\n")
+    add_library(xmr-stak-asm STATIC "${CMAKE_BINARY_DIR}/asm_stub.c" "arm_stubs.cpp")
+    target_compile_definitions(xmr-stak-asm PUBLIC DISABLE_ASM)
 else()
-    # asm optimized monero v8 code
-    enable_language(ASM)
-    set_property(SOURCE "xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.S" PROPERTY CPP)
-    set_property(SOURCE "xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.S" PROPERTY CPP)
-    set_source_files_properties("xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.S" PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
-    set_source_files_properties("xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.S" PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
-    add_library(xmr-stak-asm
-        STATIC
-        "xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.S"
-        "xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.S"
-    )
+    if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+        # asm optimized monero v8 code
+        enable_language(ASM_MASM)
+        set_property(SOURCE "xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.asm" PROPERTY ASM_MASM)
+        set_property(SOURCE "xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.asm" PROPERTY ASM_MASM)
+        add_library(xmr-stak-asm
+            STATIC
+            "xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.asm"
+            "xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.asm"
+        )
+    else()
+        # Non-MSVC compiler, use GNU assembler syntax (.S files)
+        message(STATUS "Non-MSVC compiler detected - using GNU assembler")
+        enable_language(ASM)
+        add_library(xmr-stak-asm
+            STATIC
+            "xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.S"
+            "xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.S"
+        )
+    endif()
 endif()
 
-set_property(TARGET xmr-stak-asm PROPERTY LINKER_LANGUAGE C)
-
-# compile C files
 file(GLOB SRCFILES_C "xmrstak/backend/cpu/crypto/*.c")
 
 add_library(xmr-stak-c

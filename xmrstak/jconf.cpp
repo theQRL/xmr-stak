@@ -39,8 +39,28 @@
 #ifdef _WIN32
 #define strcasecmp _stricmp
 #include <intrin.h>
-#else
+#elif defined(__x86_64__) || defined(__i386__)
+// Only include cpuid.h on x86/x86_64 architectures if available
+#if __has_include(<cpuid.h>)
 #include <cpuid.h>
+#else
+// Fallback inline assembly implementation if cpuid.h is not available
+static inline void __cpuid_count(unsigned int eax, unsigned int ecx, unsigned int* a, unsigned int* b, unsigned int* c, unsigned int* d) {
+#ifdef __x86_64__
+	asm volatile("cpuid" : "=a" (*a), "=b" (*b), "=c" (*c), "=d" (*d) : "a" (eax), "c" (ecx));
+#else
+	// For 32-bit x86, we need to save ebx register
+	asm volatile("xchgl %%ebx, %1; cpuid; xchgl %%ebx, %1" 
+		: "=a" (*a), "=r" (*b), "=c" (*c), "=d" (*d) : "a" (eax), "c" (ecx));
+#endif
+}
+#endif
+#else
+#define strcasecmp strcasecmp
+// Stub implementation for non-x86 architectures
+static inline void __cpuid_count(unsigned int eax, unsigned int ecx, unsigned int* a, unsigned int* b, unsigned int* c, unsigned int* d) {
+	*a = *b = *c = *d = 0;
+}
 #endif
 
 using namespace rapidjson;
@@ -294,7 +314,7 @@ void jconf::cpuid(uint32_t eax, int32_t ecx, int32_t val[4])
 #ifdef _WIN32
 	__cpuidex(val, eax, ecx);
 #else
-	__cpuid_count(eax, ecx, val[0], val[1], val[2], val[3]);
+	__cpuid_count(eax, ecx, (unsigned int*)&val[0], (unsigned int*)&val[1], (unsigned int*)&val[2], (unsigned int*)&val[3]);
 #endif
 }
 

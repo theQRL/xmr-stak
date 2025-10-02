@@ -35,24 +35,311 @@
 #include <sys/mman.h>
 #endif
 
-#ifdef __GNUC__
-#include <x86intrin.h>
+#if defined(__arm__) || defined(__aarch64__)
+#define USE_ARM
+#include <arm_neon.h>
+#include <cmath>
+
+#if defined(__ARM_FEATURE_CRYPTO)
+#define USE_ARM_AES
+#endif
+
+// Define ARM NEON equivalents of x86 intrinsics
+typedef uint8x16_t __m128i; // Use uint8x16_t for AES byte operations
+typedef float32x4_t __m128;
+
+// Forward declare soft AES functions from soft_aes.hpp to avoid conflicting definitions
+// Note: These are defined as static inline functions in soft_aes.hpp
+
+#ifndef _MM_HINT_T0
+#define _MM_HINT_T0 0
+#endif
+
+#ifndef _MM_HINT_T1
+#define _MM_HINT_T1 0
+#endif
+
+#ifndef _MM_HINT_T2
+#define _MM_HINT_T2 1
+#endif
+
+#ifndef _MM_HINT_NTA
+#define _MM_HINT_NTA 0
+#endif
+
+// Prefetch hint
+static inline void _mm_prefetch(const void* ptr, int hint)
+{
+    __builtin_prefetch(ptr);
+}
+
+// ARM NEON equivalents of x86 intrinsics
+static inline __m128i _mm_set_epi64x(int64_t e1, int64_t e0)
+{
+    return vreinterpretq_u8_s64(vcombine_s64(vcreate_s64(e0), vcreate_s64(e1)));
+}
+
+static inline __m128i _mm_set_epi32(int e3, int e2, int e1, int e0)
+{
+    return vreinterpretq_u8_s32(vsetq_lane_s32(e0, vsetq_lane_s32(e1, vsetq_lane_s32(e2, vsetq_lane_s32(e3, vdupq_n_s32(0), 3), 2), 1), 0));
+}
+
+static inline __m128i _mm_set1_epi32(int a)
+{
+    return vreinterpretq_u8_s32(vdupq_n_s32(a));
+}
+
+static inline __m128i _mm_setzero_si128(void)
+{
+    return vreinterpretq_u8_s32(vdupq_n_s32(0));
+}
+
+static inline __m128 _mm_setzero_ps(void)
+{
+    return vdupq_n_f32(0.0f);
+}
+
+static inline __m128i _mm_xor_si128(__m128i a, __m128i b)
+{
+    return veorq_u8(a, b);
+}
+
+// Add missing ARM implementations needed for compilation
+static inline __m128i _mm_add_epi64(__m128i a, __m128i b)
+{
+    return vreinterpretq_u8_u64(vaddq_u64(vreinterpretq_u64_u8(a), vreinterpretq_u64_u8(b)));
+}
+
+static inline __m128i _mm_cvtsi64_si128(int64_t a)
+{
+    return vreinterpretq_u8_u64(vsetq_lane_u64(a, vdupq_n_u64(0), 0));
+}
+
+static inline int64_t _mm_cvtsi128_si64(__m128i a)
+{
+    return vgetq_lane_u64(vreinterpretq_u64_u8(a), 0);
+}
+
+static inline int32_t _mm_cvtsi128_si32(__m128i a)
+{
+    return vgetq_lane_s32(vreinterpretq_s32_u8(a), 0);
+}
+
+static inline __m128 _mm_and_ps(__m128 a, __m128 b)
+{
+    return vreinterpretq_f32_u32(vandq_u32(vreinterpretq_u32_f32(a), vreinterpretq_u32_f32(b)));
+}
+
+static inline __m128 _mm_or_ps(__m128 a, __m128 b)
+{
+    return vreinterpretq_f32_u32(vorrq_u32(vreinterpretq_u32_f32(a), vreinterpretq_u32_f32(b)));
+}
+
+static inline __m128 _mm_mul_ps(__m128 a, __m128 b)
+{
+    return vmulq_f32(a, b);
+}
+
+static inline __m128i _mm_load_si128(const __m128i* ptr)
+{
+    return vld1q_u8((const uint8_t*)ptr);
+}
+
+static inline void _mm_store_si128(__m128i* ptr, __m128i val)
+{
+    vst1q_u8((uint8_t*)ptr, val);
+}
+
+// ARM implementation of _mm_srli_si128
+static inline __m128i _mm_srli_si128(__m128i a, int imm)
+{
+    if (imm >= 16) return _mm_setzero_si128();
+    if (imm == 0) return a;
+    // Create zero vector and combine
+    uint8x16_t zero = vdupq_n_u8(0);
+    return vextq_u8(a, zero, imm);
+}
+
+// ARM implementation of _mm_alignr_epi8 (now _mm_srli_si128 is defined)
+static inline __m128i _mm_alignr_epi8(__m128i a, __m128i b, int imm)
+{
+    if (imm >= 32) return _mm_setzero_si128();
+    if (imm >= 16) return _mm_srli_si128(a, imm - 16);
+    return vextq_u8(b, a, imm);
+}
+
+// ARM implementation of _mm_slli_si128
+static inline __m128i _mm_slli_si128(__m128i a, int imm)
+{
+    if (imm >= 16) return _mm_setzero_si128();
+    if (imm == 0) return a;
+    // Create zero vector and combine
+    uint8x16_t zero = vdupq_n_u8(0);
+    return vextq_u8(zero, a, 16 - imm);
+}
+
+// ARM implementation of _mm_shuffle_epi32
+static inline __m128i _mm_shuffle_epi32(__m128i a, int imm)
+{
+    uint32x4_t a32 = vreinterpretq_u32_u8(a);
+    uint32_t lane0 = vgetq_lane_u32(a32, (imm) & 3);
+    uint32_t lane1 = vgetq_lane_u32(a32, (imm >> 2) & 3);
+    uint32_t lane2 = vgetq_lane_u32(a32, (imm >> 4) & 3);
+    uint32_t lane3 = vgetq_lane_u32(a32, (imm >> 6) & 3);
+    uint32x4_t result = vsetq_lane_u32(lane0, vsetq_lane_u32(lane1, vsetq_lane_u32(lane2, vsetq_lane_u32(lane3, vdupq_n_u32(0), 3), 2), 1), 0);
+    return vreinterpretq_u8_u32(result);
+}
+
+// Implement _umul128 for ARM
 static inline uint64_t _umul128(uint64_t a, uint64_t b, uint64_t* hi)
 {
-	unsigned __int128 r = (unsigned __int128)a * (unsigned __int128)b;
-	*hi = r >> 64;
-	return (uint64_t)r;
+    // 64-bit multiplication with 128-bit result
+    #if defined(__aarch64__)
+    // For aarch64, we can use asm directly
+    uint64_t lo;
+    asm("mul %0, %2, %3\n\t"
+        "umulh %1, %2, %3\n\t"
+        : "=r"(lo), "=r"(*hi)
+        : "r"(a), "r"(b)
+        : "cc");
+    return lo;
+    #else
+    // For 32-bit ARM, use a software implementation
+    uint64_t a_lo = (uint64_t)(uint32_t)a;
+    uint64_t a_hi = a >> 32;
+    uint64_t b_lo = (uint64_t)(uint32_t)b;
+    uint64_t b_hi = b >> 32;
+
+    uint64_t p0 = a_lo * b_lo;
+    uint64_t p1 = a_lo * b_hi;
+    uint64_t p2 = a_hi * b_lo;
+    uint64_t p3 = a_hi * b_hi;
+
+    uint32_t cy = (uint32_t)(((p0 >> 32) + (uint32_t)p1 + (uint32_t)p2) >> 32);
+
+    *hi = p3 + (p1 >> 32) + (p2 >> 32) + cy;
+    return p0 + (p1 << 32) + (p2 << 32);
+    #endif
 }
 
 #else
+#ifdef __GNUC__
+#include <x86intrin.h>
+#else
 #include <intrin.h>
-#endif // __GNUC__
+#endif
+#endif // ARM detection
+
+#if defined(USE_ARM) && !defined(USE_ARM_AES)
+#define FORCE_SOFT_AES
+#endif
+
+#if defined(USE_ARM)
+// Basic vector operations (these have already been defined above)
+
+// Add more ARM NEON equivalents of x86 intrinsics
+static inline __m128i _mm_cmpeq_epi32(__m128i a, __m128i b) {
+    return vreinterpretq_u8_u32(vceqq_s32(vreinterpretq_s32_u8(a), vreinterpretq_s32_u8(b)));
+}
+
+static inline __m128 _mm_sqrt_sd(__m128 a, __m128 b) {
+    float32x4_t c = vsetq_lane_f32(sqrtf(vgetq_lane_f32(b, 0)), a, 0);
+    return c;
+}
+
+// Add missing floating point functions
+static inline __m128 _mm_set1_ps(float a) {
+    return vdupq_n_f32(a);
+}
+
+static inline __m128 _mm_add_ps(__m128 a, __m128 b) {
+    return vaddq_f32(a, b);
+}
+
+static inline __m128 _mm_cvtepi32_ps(__m128i a) {
+    return vcvtq_f32_s32(vreinterpretq_s32_u8(a));
+}
+
+static inline __m128i _mm_cvttps_epi32(__m128 a) {
+    return vreinterpretq_u8_s32(vcvtq_s32_f32(a));
+}
+
+// Add missing double precision functions
+typedef float64x2_t __m128d;
+
+static inline __m128d _mm_setzero_pd(void) {
+    return vdupq_n_f64(0.0);
+}
+
+static inline __m128d _mm_castsi128_pd(__m128i a) {
+    return vreinterpretq_f64_u8(a);
+}
+
+static inline __m128i _mm_castpd_si128(__m128d a) {
+    return vreinterpretq_u8_f64(a);
+}
+
+// Overload _mm_sqrt_sd for double precision (now that __m128d is defined)
+static inline __m128d _mm_sqrt_sd(__m128d a, __m128d b) {
+    return vsetq_lane_f64(sqrt(vgetq_lane_f64(b, 0)), a, 0);
+}
+
+// ARM implementations of missing carry/borrow functions
+static inline unsigned char _addcarry_u64(unsigned char c_in, uint64_t a, uint64_t b, uint64_t* out)
+{
+    uint64_t sum = a + b + c_in;
+    *out = sum;
+    // Check for overflow
+    return (sum < a) || (c_in && sum == a);
+}
+
+static inline unsigned char _subborrow_u64(unsigned char c_in, uint64_t a, uint64_t b, uint64_t* out)
+{
+    uint64_t diff = a - b - c_in;
+    *out = diff;
+    // Check for underflow
+    return (a < b) || (c_in && a == b);
+}
+
+static inline __m128i _mm_castps_si128(__m128 a) {
+    return vreinterpretq_u8_f32(a);
+}
+
+static inline __m128 _mm_castsi128_ps(__m128i a) {
+    return vreinterpretq_f32_u8(a);
+}
+
+static inline __m128 _mm_movehl_ps(__m128 a, __m128 b) {
+    float32x2_t a_lo = vget_low_f32(a);
+    float32x2_t b_hi = vget_high_f32(b);
+    return vcombine_f32(b_hi, a_lo);
+}
+
+// Enhanced shuffle implementation for ARM
+
+// AES operations will be defined after soft_aes.hpp include to access soft_aesenc
+
+#endif // USE_ARM
 
 #if !defined(_LP64) && !defined(_WIN64)
 #error You are trying to do a 32-bit build. This will all end in tears. I know it.
 #endif
 
 #include "soft_aes.hpp"
+
+#if defined(USE_ARM)
+// AES operations with hardware AES support for ARM - now soft_aesenc is available
+static inline __m128i _mm_aesenc_si128(__m128i a, __m128i roundKey) {
+#if defined(USE_ARM_AES)
+    uint8x16_t result = vaeseq_u8(a, roundKey);
+    result = vaesmcq_u8(result); // Mix columns
+    return veorq_u8(result, roundKey); // Add round key
+#else
+    // Fallback to soft AES implementation
+    return soft_aesenc(a, roundKey);
+#endif
+}
+#endif
 
 extern "C"
 {
@@ -75,18 +362,89 @@ static inline __m128i sl_xor(__m128i tmp1)
 	return tmp1;
 }
 
+#if defined(USE_ARM)
+// 64-bit multiplication with 128-bit result for ARM
+static inline void _umul128(uint64_t a, uint64_t b, uint64_t* hi, uint64_t* lo)
+{
+    // For ARM we need to split the 64-bit multiplication into 32-bit parts
+    uint64_t ah = a >> 32, al = a & 0xFFFFFFFF;
+    uint64_t bh = b >> 32, bl = b & 0xFFFFFFFF;
+    
+    // Cross products
+    uint64_t axbh = al * bh;
+    uint64_t ahxbl = ah * bl;
+    uint64_t ahxbh = ah * bh;
+    uint64_t alxbl = al * bl;
+    
+    // Full result of multiplication: lo + (hi << 64)
+    uint64_t middle = ahxbl + axbh;
+    uint64_t carry = (middle < ahxbl) ? 1 : 0;
+    
+    *lo = alxbl + (middle << 32);
+    *hi = ahxbh + (middle >> 32) + (carry << 32) + (*lo < alxbl ? 1 : 0);
+}
+#endif
+
+// Define soft_aes_round before its use in aes_round
+static inline void soft_aes_round(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2, __m128i* x3, __m128i* x4, __m128i* x5, __m128i* x6, __m128i* x7)
+{
+	*x0 = soft_aesenc(*x0, key);
+	*x1 = soft_aesenc(*x1, key);
+	*x2 = soft_aesenc(*x2, key);
+	*x3 = soft_aesenc(*x3, key);
+	*x4 = soft_aesenc(*x4, key);
+	*x5 = soft_aesenc(*x5, key);
+	*x6 = soft_aesenc(*x6, key);
+	*x7 = soft_aesenc(*x7, key);
+}
+
+#if defined(USE_ARM)
+template <uint8_t rcon>
+static inline void aes_genkey_sub(__m128i* xout0, __m128i* xout2)
+{
+    __m128i xout1;
+#if defined(USE_ARM_AES)
+    // Hardware AES implementation using ARM crypto extensions
+    uint8x16_t tmp = *xout2;
+    // Substitute bytes
+    tmp = vaeseq_u8(tmp, vdupq_n_u8(0));
+    // Skip mix columns (we don't need it for key generation)
+    
+    // Create a mask for the rcon value
+    uint8x16_t rcon_mask = vdupq_n_u8(0);
+    rcon_mask = vsetq_lane_u8(rcon, rcon_mask, 0);
+    
+    // XOR with rcon
+    tmp = veorq_u8(tmp, rcon_mask);
+    
+    xout1 = tmp;
+#else
+    // Use fallback soft AES implementation
+    xout1 = soft_aeskeygenassist(*xout2, rcon);
+#endif
+    // Shift and apply the key schedule
+    xout1 = _mm_shuffle_epi32(xout1, 0xFF);
+    *xout0 = sl_xor(*xout0);
+    *xout0 = _mm_xor_si128(*xout0, xout1);
+    xout1 = soft_aeskeygenassist(*xout0, 0x00);
+    xout1 = _mm_shuffle_epi32(xout1, 0xAA);
+    *xout2 = sl_xor(*xout2);
+    *xout2 = _mm_xor_si128(*xout2, xout1);
+}
+#else
 template <uint8_t rcon>
 static inline void aes_genkey_sub(__m128i* xout0, __m128i* xout2)
 {
 	__m128i xout1 = _mm_aeskeygenassist_si128(*xout2, rcon);
-	xout1 = _mm_shuffle_epi32(xout1, 0xFF); // see PSHUFD, set all elems to 4th elem
+	xout1 = _mm_shuffle_epi32(xout1, 0xFF);
 	*xout0 = sl_xor(*xout0);
 	*xout0 = _mm_xor_si128(*xout0, xout1);
 	xout1 = _mm_aeskeygenassist_si128(*xout0, 0x00);
-	xout1 = _mm_shuffle_epi32(xout1, 0xAA); // see PSHUFD, set all elems to 3rd elem
+	xout1 = _mm_shuffle_epi32(xout1, 0xAA);
 	*xout2 = sl_xor(*xout2);
 	*xout2 = _mm_xor_si128(*xout2, xout1);
 }
+#endif
 
 static inline void soft_aes_genkey_sub(__m128i* xout0, __m128i* xout2, uint8_t rcon)
 {
@@ -140,6 +498,23 @@ static inline void aes_genkey(const __m128i* memory, __m128i* k0, __m128i* k1, _
 	*k9 = xout2;
 }
 
+#if defined(USE_ARM)
+static inline void aes_round(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2, __m128i* x3, __m128i* x4, __m128i* x5, __m128i* x6, __m128i* x7)
+{
+#if defined(USE_ARM_AES)
+    *x0 = veorq_u8(vaeseq_u8(*x0, key), key);
+    *x1 = veorq_u8(vaeseq_u8(*x1, key), key);
+    *x2 = veorq_u8(vaeseq_u8(*x2, key), key);
+    *x3 = veorq_u8(vaeseq_u8(*x3, key), key);
+    *x4 = veorq_u8(vaeseq_u8(*x4, key), key);
+    *x5 = veorq_u8(vaeseq_u8(*x5, key), key);
+    *x6 = veorq_u8(vaeseq_u8(*x6, key), key);
+    *x7 = veorq_u8(vaeseq_u8(*x7, key), key);
+#else
+    soft_aes_round(key, x0, x1, x2, x3, x4, x5, x6, x7);
+#endif
+}
+#else
 static inline void aes_round(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2, __m128i* x3, __m128i* x4, __m128i* x5, __m128i* x6, __m128i* x7)
 {
 	*x0 = _mm_aesenc_si128(*x0, key);
@@ -151,19 +526,22 @@ static inline void aes_round(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2,
 	*x6 = _mm_aesenc_si128(*x6, key);
 	*x7 = _mm_aesenc_si128(*x7, key);
 }
+#endif
 
-static inline void soft_aes_round(__m128i key, __m128i* x0, __m128i* x1, __m128i* x2, __m128i* x3, __m128i* x4, __m128i* x5, __m128i* x6, __m128i* x7)
+#if defined(USE_ARM)
+inline void mix_and_propagate(__m128i& x0, __m128i& x1, __m128i& x2, __m128i& x3, __m128i& x4, __m128i& x5, __m128i& x6, __m128i& x7)
 {
-	*x0 = soft_aesenc(*x0, key);
-	*x1 = soft_aesenc(*x1, key);
-	*x2 = soft_aesenc(*x2, key);
-	*x3 = soft_aesenc(*x3, key);
-	*x4 = soft_aesenc(*x4, key);
-	*x5 = soft_aesenc(*x5, key);
-	*x6 = soft_aesenc(*x6, key);
-	*x7 = soft_aesenc(*x7, key);
+    __m128i tmp0 = x0;
+    x0 = veorq_u8(x0, x1);
+    x1 = veorq_u8(x1, x2);
+    x2 = veorq_u8(x2, x3);
+    x3 = veorq_u8(x3, x4);
+    x4 = veorq_u8(x4, x5);
+    x5 = veorq_u8(x5, x6);
+    x6 = veorq_u8(x6, x7);
+    x7 = veorq_u8(x7, tmp0);
 }
-
+#else
 inline void mix_and_propagate(__m128i& x0, __m128i& x1, __m128i& x2, __m128i& x3, __m128i& x4, __m128i& x5, __m128i& x6, __m128i& x7)
 {
 	__m128i tmp0 = x0;
@@ -176,6 +554,7 @@ inline void mix_and_propagate(__m128i& x0, __m128i& x1, __m128i& x2, __m128i& x3
 	x6 = _mm_xor_si128(x6, x7);
 	x7 = _mm_xor_si128(x7, tmp0);
 }
+#endif
 
 template <bool SOFT_AES, bool PREFETCH, xmrstak_algo_id ALGO>
 void cn_explode_scratchpad(const __m128i* input, __m128i* output, const xmrstak_algo& algo)
@@ -491,6 +870,9 @@ inline uint64_t int_sqrt33_1_double_precision(const uint64_t n0)
 
 #ifdef __INTEL_COMPILER
 	_addcarry_u64(_subborrow_u64(0, x2, n0, (unsigned __int64*)&x2), r, 0, (unsigned __int64*)&r);
+#elif defined(USE_ARM)
+	// ARM specific: use uint64_t* directly
+	_addcarry_u64(_subborrow_u64(0, x2, n0, &x2), r, 0, &r);
 #elif defined(_MSC_VER) || (__GNUC__ >= 7)
 	_addcarry_u64(_subborrow_u64(0, x2, n0, (unsigned long long int*)&x2), r, 0, (unsigned long long int*)&r);
 #else
@@ -606,10 +988,19 @@ inline void set_float_rounding_mode_nearest()
 #endif
 }
 
+#if defined(USE_ARM)
+inline __m128 _mm_set1_ps_epi32(uint32_t x)
+{
+    return vreinterpretq_f32_s32(vdupq_n_s32(x));
+}
+
+// Removed duplicate definitions that are already defined earlier in the file
+#else
 inline __m128 _mm_set1_ps_epi32(uint32_t x)
 {
 	return _mm_castsi128_ps(_mm_set1_epi32(x));
 }
+#endif
 
 inline void cryptonight_conceal_tweak(__m128i& cx, __m128& conc_var)
 {

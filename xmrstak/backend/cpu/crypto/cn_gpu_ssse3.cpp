@@ -1,6 +1,16 @@
 #include "../../cryptonight.hpp"
 #include "cn_gpu.hpp"
 
+// Only compile SSSE3 code on x86/x86_64 architectures
+#if !defined(__aarch64__) && !defined(__arm__) && (defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86))
+
+#include <immintrin.h>
+#include <xmmintrin.h>  // SSE
+#include <emmintrin.h>  // SSE2
+#include <pmmintrin.h>  // SSE3
+#include <smmintrin.h>  // SSE4.1
+#include <tmmintrin.h>  // SSSE3
+
 #pragma GCC target("sse2")
 
 inline void prep_dv(__m128i* idx, __m128i& v, __m128& n)
@@ -173,9 +183,19 @@ void cn_gpu_inner_ssse3(const uint8_t* spad, uint8_t* lpad, const xmrstak_algo& 
 		// vs is now between 0 and 1
 		sum0 = _mm_div_ps(sum0, _mm_set1_ps(64.0f));
 		uint32_t n = _mm_cvtsi128_si32(v0);
-		idx0 = scratchpad_ptr(lpad, n, 0, mask);
-		idx1 = scratchpad_ptr(lpad, n, 1, mask);
-		idx2 = scratchpad_ptr(lpad, n, 2, mask);
-		idx3 = scratchpad_ptr(lpad, n, 3, mask);
+	idx0 = scratchpad_ptr(lpad, n, 0, mask);
+	idx1 = scratchpad_ptr(lpad, n, 1, mask);
+	idx2 = scratchpad_ptr(lpad, n, 2, mask);
+	idx3 = scratchpad_ptr(lpad, n, 3, mask);
 	}
 }
+
+#else
+// ARM stub implementations
+void cn_gpu_inner_ssse3(const uint8_t* spad, uint8_t* lpad, const xmrstak_algo& algo)
+{
+    // Stub implementation for ARM - does nothing
+    // In a real implementation, this would need to be replaced with ARM NEON equivalent
+}
+
+#endif // !defined(__aarch64__) && !defined(__arm__) && (defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86))

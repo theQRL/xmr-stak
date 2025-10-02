@@ -33,8 +33,13 @@
 #ifdef _WIN32
 #define strcasecmp _stricmp
 #include <intrin.h>
-#else
+#elif defined(__x86_64__) || defined(__i386__)
+// Only include cpuid.h on x86/x86_64 architectures if available
+#if __has_include(<cpuid.h>)
 #include <cpuid.h>
+#endif
+#else
+#define strcasecmp strcasecmp
 #endif
 
 namespace xmrstak

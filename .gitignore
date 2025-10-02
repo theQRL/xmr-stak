@@ -10,6 +10,7 @@ config-debug.txt
 
 # tmp files
 *~
+CMakeFiles/
 
 # merge original backup files
 *.orig

@@ -1,39 +1,34 @@
 /*
-  * This program is free software: you can redistribute it and/or modify
-  * it under the terms of the GNU General Public License as published by
-  * the Free Software Foundation, either version 3 of the License, or
-  * any later version.
-  *
-  * This program is distributed in the hope that it will be useful,
-  * but WITHOUT ANY WARRANTY; without even the implied warranty of
-  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  * GNU General Public License for more details.
-  *
-  * You should have received a copy of the GNU General Public License
-  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
-  *
-  * Additional permission under GNU GPL version 3 section 7
-  *
-  * If you modify this Program, or any covered work, by linking or combining
-  * it with OpenSSL (or a modified version of that library), containing parts
-  * covered by the terms of OpenSSL License and SSLeay License, the licensors
-  * of this Program grant you additional permission to convey the resulting work.
-  *
-  */
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Additional permission under GNU GPL version 3 section 7
+ *
+ * If you modify this Program, or any covered work, by linking or combining
+ * it with OpenSSL (or a modified version of that library), containing parts
+ * covered by the terms of OpenSSL License and SSLeay License, the licensors
+ * of this Program grant you additional permission to convey the resulting work.
+ *
+ */
 
 /*
  * Parts of this file are originally copyright (c) 2014-2017, The Monero Project
  */
 #pragma once
 
-#ifdef __GNUC__
-#include <x86intrin.h>
-#else
-#include <intrin.h>
-#endif // __GNUC__
-
 #include <inttypes.h>
 
+// Common AES data tables and helper macros
 #define saes_data(w)                                                                \
 	{                                                                               \
 		w(0x63), w(0x7c), w(0x77), w(0x7b), w(0xf2), w(0x6b), w(0x6f), w(0xc5),     \
@@ -87,23 +82,7 @@
 alignas(16) const uint32_t saes_table[4][256] = {saes_data(saes_u0), saes_data(saes_u1), saes_data(saes_u2), saes_data(saes_u3)};
 alignas(16) const uint8_t saes_sbox[256] = saes_data(saes_h0);
 
-static inline __m128i soft_aesenc(__m128i in, __m128i key)
-{
-	uint32_t x0, x1, x2, x3;
-	x0 = _mm_cvtsi128_si32(in);
-	x1 = _mm_cvtsi128_si32(_mm_shuffle_epi32(in, 0x55));
-	x2 = _mm_cvtsi128_si32(_mm_shuffle_epi32(in, 0xAA));
-	x3 = _mm_cvtsi128_si32(_mm_shuffle_epi32(in, 0xFF));
-
-	__m128i out = _mm_set_epi32(
-		(saes_table[0][x3 & 0xff] ^ saes_table[1][(x0 >> 8) & 0xff] ^ saes_table[2][(x1 >> 16) & 0xff] ^ saes_table[3][x2 >> 24]),
-		(saes_table[0][x2 & 0xff] ^ saes_table[1][(x3 >> 8) & 0xff] ^ saes_table[2][(x0 >> 16) & 0xff] ^ saes_table[3][x1 >> 24]),
-		(saes_table[0][x1 & 0xff] ^ saes_table[1][(x2 >> 8) & 0xff] ^ saes_table[2][(x3 >> 16) & 0xff] ^ saes_table[3][x0 >> 24]),
-		(saes_table[0][x0 & 0xff] ^ saes_table[1][(x1 >> 8) & 0xff] ^ saes_table[2][(x2 >> 16) & 0xff] ^ saes_table[3][x3 >> 24]));
-
-	return _mm_xor_si128(out, key);
-}
-
+// Common helper functions
 static inline uint32_t sub_word(uint32_t key)
 {
 	return (saes_sbox[key >> 24] << 24) |
@@ -119,9 +98,60 @@ static inline uint32_t _rotr(uint32_t value, uint32_t amount)
 }
 #endif
 
-static inline __m128i soft_aeskeygenassist(__m128i key, uint8_t rcon)
-{
-	uint32_t X1 = sub_word(_mm_cvtsi128_si32(_mm_shuffle_epi32(key, 0x55)));
-	uint32_t X3 = sub_word(_mm_cvtsi128_si32(_mm_shuffle_epi32(key, 0xFF)));
-	return _mm_set_epi32(_rotr(X3, 8) ^ rcon, X3, _rotr(X1, 8) ^ rcon, X1);
+// Architecture-specific implementations
+#if defined(__ARM_NEON) || defined(__aarch64__)
+#include <arm_neon.h>
+
+// Improved software AES implementation for ARM NEON
+static inline __m128i soft_aesenc(__m128i in, __m128i key) {
+    // Extract the 4 32-bit values from the input
+    uint32_t x0 = vgetq_lane_s32(vreinterpretq_s32_u8(in), 0);
+    uint32_t x1 = vgetq_lane_s32(vreinterpretq_s32_u8(in), 1);
+    uint32_t x2 = vgetq_lane_s32(vreinterpretq_s32_u8(in), 2);
+    uint32_t x3 = vgetq_lane_s32(vreinterpretq_s32_u8(in), 3);
+
+    // Apply the AES S-box and transformation
+    uint32_t y0 = saes_table[0][x0 & 0xff] ^ saes_table[1][(x1 >> 8) & 0xff] ^ saes_table[2][(x2 >> 16) & 0xff] ^ saes_table[3][x3 >> 24];
+    uint32_t y1 = saes_table[0][x1 & 0xff] ^ saes_table[1][(x2 >> 8) & 0xff] ^ saes_table[2][(x3 >> 16) & 0xff] ^ saes_table[3][x0 >> 24];
+    uint32_t y2 = saes_table[0][x2 & 0xff] ^ saes_table[1][(x3 >> 8) & 0xff] ^ saes_table[2][(x0 >> 16) & 0xff] ^ saes_table[3][x1 >> 24];
+    uint32_t y3 = saes_table[0][x3 & 0xff] ^ saes_table[1][(x0 >> 8) & 0xff] ^ saes_table[2][(x1 >> 16) & 0xff] ^ saes_table[3][x2 >> 24];
+
+    // Create the output NEON register
+    int32_t values[4] = { y0, y1, y2, y3 };
+    __m128i out = vreinterpretq_u8_s32(vld1q_s32(values));
+
+    // XOR with the round key
+    return veorq_u8(out, key);
 }
+
+static inline __m128i soft_aeskeygenassist(__m128i key, uint8_t rcon) {
+    // Extract values from key
+    uint32_t x1 = vgetq_lane_s32(vreinterpretq_s32_u8(key), 1);
+    uint32_t x3 = vgetq_lane_s32(vreinterpretq_s32_u8(key), 3);
+    
+    // Apply SubWord operation to x1 and x3
+    uint32_t s1 = sub_word(x1);
+    uint32_t s3 = sub_word(x3);
+    
+    // Apply rotation and XOR with rcon
+    uint32_t r1 = ((s1 >> 8) | (s1 << 24)) ^ rcon;
+    uint32_t r3 = ((s3 >> 8) | (s3 << 24)) ^ rcon;
+    
+    // Build and return the result
+    int32_t values[4] = { r1, s1, r3, s3 };
+    return vreinterpretq_u8_s32(vld1q_s32(values));
+}
+
+#else // x86 architecture
+
+#ifdef __GNUC__
+#include <x86intrin.h>
+#else
+#include <intrin.h>
+#endif // __GNUC__
+
+// On x86, use the hardware AES instructions
+#define soft_aesenc(x, k) _mm_aesenc_si128(x, k)
+#define soft_aeskeygenassist(x, k) _mm_aeskeygenassist_si128(x, k)
+
+#endif // ARM vs x86

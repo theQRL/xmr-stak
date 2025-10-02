@@ -2,6 +2,7 @@
 
 #include "xmrstak/misc/environment.hpp"
 
+#include <cstdio>
 #include <mutex>
 
 enum out_colours
