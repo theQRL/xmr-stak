@@ -225,6 +225,18 @@ static inline uint64_t _umul128(uint64_t a, uint64_t b, uint64_t* hi)
 #else
 #ifdef __GNUC__
 #include <x86intrin.h>
+
+// GCC on x64 Linux doesn't have _umul128 intrinsic, so we implement it
+#if !defined(_MSC_VER) && defined(__x86_64__)
+static inline uint64_t _umul128(uint64_t a, uint64_t b, uint64_t* hi)
+{
+    // Use __int128 for 128-bit arithmetic on GCC x64
+    __uint128_t result = (__uint128_t)a * b;
+    *hi = (uint64_t)(result >> 64);
+    return (uint64_t)result;
+}
+#endif
+
 #else
 #include <intrin.h>
 #endif
