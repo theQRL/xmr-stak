@@ -11,6 +11,8 @@ config-debug.txt
 # tmp files
 *~
 CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
 
 # merge original backup files
 *.orig

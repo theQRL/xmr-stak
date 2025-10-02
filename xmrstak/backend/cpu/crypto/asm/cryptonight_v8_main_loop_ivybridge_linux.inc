@@ -9,7 +9,7 @@
     sub     rsp, 80
 
     stmxcsr [rsp]
-    mov     dword [rsp+4], 24448
+    mov     dword ptr [rsp+4], 24448
     ldmxcsr [rsp+4]
 
     mov     rax, [rcx+48]
@@ -50,7 +50,7 @@
     punpcklqdq xmm5, xmm0
     movdqu  xmm6, [r10+rbx]
 
-align 64
+.align 64
 main_loop_ivybridge:
     lea     rdx, [r10+rbx]
     mov     ecx, r10d

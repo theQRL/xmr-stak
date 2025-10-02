@@ -1,6 +1,6 @@
-	mov	QWORD PTR [rsp+16], rbx
-	mov	QWORD PTR [rsp+24], rbp
-	mov	QWORD PTR [rsp+32], rsi
+	mov	qword ptr [rsp+16], rbx
+	mov	qword ptr [rsp+24], rbp
+	mov	qword ptr [rsp+32], rsi
 	push	rdi
 	push	r12
 	push	r13
@@ -8,51 +8,51 @@
 	push	r15
 	sub	rsp, 64
 
-	stmxcsr DWORD PTR [rsp]
-	mov DWORD PTR [rsp+4], 24448
-	ldmxcsr DWORD PTR [rsp+4]
+	stmxcsr dword ptr [rsp]
+	mov dword ptr [rsp+4], 24448
+	ldmxcsr dword ptr [rsp+4]
 
-	mov	rax, QWORD PTR [rcx+48]
+	mov	rax, qword ptr [rcx+48]
 	mov	r9, rcx
-	xor	rax, QWORD PTR [rcx+16]
+	xor	rax, qword ptr [rcx+16]
 	mov	ebp, 524288
-	mov	r8, QWORD PTR [rcx+32]
-	xor	r8, QWORD PTR [rcx]
-	mov	r11, QWORD PTR [rcx+40]
+	mov	r8, qword ptr [rcx+32]
+	xor	r8, qword ptr [rcx]
+	mov	r11, qword ptr [rcx+40]
 	mov	r10, r8
-	mov	rdx, QWORD PTR [rcx+56]
+	mov	rdx, qword ptr [rcx+56]
 	movq	xmm3, rax
-	xor	rdx, QWORD PTR [rcx+24]
-	xor	r11, QWORD PTR [rcx+8]
-	mov	rbx, QWORD PTR [rcx+224]
-	mov	rax, QWORD PTR [r9+80]
-	xor	rax, QWORD PTR [r9+64]
+	xor	rdx, qword ptr [rcx+24]
+	xor	r11, qword ptr [rcx+8]
+	mov	rbx, qword ptr [rcx+224]
+	mov	rax, qword ptr [r9+80]
+	xor	rax, qword ptr [r9+64]
 	movq	xmm0, rdx
-	mov	rcx, QWORD PTR [rcx+88]
-	xor	rcx, QWORD PTR [r9+72]
-	mov	rdi, QWORD PTR [r9+104]
+	mov	rcx, qword ptr [rcx+88]
+	xor	rcx, qword ptr [r9+72]
+	mov	rdi, qword ptr [r9+104]
 	and	r10d, 2097136
-	movaps	XMMWORD PTR [rsp+48], xmm6
+	movaps	xmmword ptr [rsp+48], xmm6
 	movq	xmm4, rax
-	movaps	XMMWORD PTR [rsp+32], xmm7
-	movaps	XMMWORD PTR [rsp+16], xmm8
+	movaps	xmmword ptr [rsp+32], xmm7
+	movaps	xmmword ptr [rsp+16], xmm8
 	xorps	xmm8, xmm8
 	mov ax, 1023
 	shl rax, 52
 	movq xmm7, rax
-	mov	r15, QWORD PTR [r9+96]
+	mov	r15, qword ptr [r9+96]
 	punpcklqdq xmm3, xmm0
 	movq	xmm0, rcx
 	punpcklqdq xmm4, xmm0
 
-	ALIGN(64)
+	.align 64
 main_loop_ryzen:
-	movdqa	xmm5, XMMWORD PTR [r10+rbx]
+	movdqa	xmm5, xmmword ptr [r10+rbx]
 	movq	xmm0, r11
 	movq	xmm6, r8
 	punpcklqdq xmm6, xmm0
-	lea	rdx, QWORD PTR [r10+rbx]
-	lea	r9, QWORD PTR [rdi+rdi]
+	lea	rdx, qword ptr [r10+rbx]
+	lea	r9, qword ptr [rdi+rdi]
 	shl	rdi, 32
 
 	mov	ecx, r10d
@@ -61,15 +61,15 @@ main_loop_ryzen:
 	xor	eax, 32
 	xor	r10d, 48
 	aesenc	xmm5, xmm6
-	movdqa	xmm2, XMMWORD PTR [rcx+rbx]
-	movdqa	xmm1, XMMWORD PTR [rax+rbx]
-	movdqa	xmm0, XMMWORD PTR [r10+rbx]
+	movdqa	xmm2, xmmword ptr [rcx+rbx]
+	movdqa	xmm1, xmmword ptr [rax+rbx]
+	movdqa	xmm0, xmmword ptr [r10+rbx]
 	paddq	xmm2, xmm3
 	paddq	xmm1, xmm6
 	paddq	xmm0, xmm4
-	movdqa	XMMWORD PTR [rcx+rbx], xmm0
-	movdqa	XMMWORD PTR [rax+rbx], xmm2
-	movdqa	XMMWORD PTR [r10+rbx], xmm1
+	movdqa	xmmword ptr [rcx+rbx], xmm0
+	movdqa	xmmword ptr [rax+rbx], xmm2
+	movdqa	xmmword ptr [r10+rbx], xmm1
 
 	movaps	xmm1, xmm8
 	mov	rsi, r15
@@ -79,10 +79,10 @@ main_loop_ryzen:
 	pxor	xmm0, xmm3
 	mov	r10, r14
 	and	r10d, 2097136
-	movdqa	XMMWORD PTR [rdx], xmm0
-	xor	rsi, QWORD PTR [r10+rbx]
-	lea	r12, QWORD PTR [r10+rbx]
-	mov	r13, QWORD PTR [r10+rbx+8]
+	movdqa	xmmword ptr [rdx], xmm0
+	xor	rsi, qword ptr [r10+rbx]
+	lea	r12, qword ptr [r10+rbx]
+	mov	r13, qword ptr [r10+rbx+8]
 
 	add	r9d, r14d
 	or	r9d, -2147483647
@@ -118,24 +118,24 @@ sqrt_fixup_ryzen_ret:
 	xor	r9d, 16
 	xor	ecx, 32
 	xor	r10d, 48
-	movdqa	xmm1, XMMWORD PTR [rcx+rbx]
+	movdqa	xmm1, xmmword ptr [rcx+rbx]
 	xor rdx, [rcx+rbx]
 	xor rax, [rcx+rbx+8]
-	movdqa	xmm2, XMMWORD PTR [r9+rbx]
+	movdqa	xmm2, xmmword ptr [r9+rbx]
 	pxor xmm2, xmm0
-	paddq xmm4, XMMWORD PTR [r10+rbx]
+	paddq xmm4, xmmword ptr [r10+rbx]
 	paddq	xmm2, xmm3
 	paddq	xmm1, xmm6
-	movdqa	XMMWORD PTR [r9+rbx], xmm4
-	movdqa	XMMWORD PTR [rcx+rbx], xmm2
-	movdqa	XMMWORD PTR [r10+rbx], xmm1
+	movdqa	xmmword ptr [r9+rbx], xmm4
+	movdqa	xmmword ptr [rcx+rbx], xmm2
+	movdqa	xmmword ptr [r10+rbx], xmm1
 
 	movdqa	xmm4, xmm3
 	add	r8, rdx
 	add	r11, rax
-	mov	QWORD PTR [r12], r8
+	mov	qword ptr [r12], r8
 	xor	r8, rsi
-	mov	QWORD PTR [r12+8], r11
+	mov	qword ptr [r12+8], r11
 	mov	r10, r8
 	xor	r11, r13
 	and	r10d, 2097136
@@ -143,14 +143,14 @@ sqrt_fixup_ryzen_ret:
 	dec	ebp
 	jne	main_loop_ryzen
 
-	ldmxcsr DWORD PTR [rsp]
-	movaps	xmm6, XMMWORD PTR [rsp+48]
-	lea	r11, QWORD PTR [rsp+64]
-	mov	rbx, QWORD PTR [r11+56]
-	mov	rbp, QWORD PTR [r11+64]
-	mov	rsi, QWORD PTR [r11+72]
-	movaps	xmm8, XMMWORD PTR [r11-48]
-	movaps	xmm7, XMMWORD PTR [rsp+32]
+	ldmxcsr dword ptr [rsp]
+	movaps	xmm6, xmmword ptr [rsp+48]
+	lea	r11, qword ptr [rsp+64]
+	mov	rbx, qword ptr [r11+56]
+	mov	rbp, qword ptr [r11+64]
+	mov	rsi, qword ptr [r11+72]
+	movaps	xmm8, xmmword ptr [r11-48]
+	movaps	xmm7, xmmword ptr [rsp+32]
 	mov	rsp, r11
 	pop	r15
 	pop	r14
