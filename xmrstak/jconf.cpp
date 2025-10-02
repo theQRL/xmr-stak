@@ -314,7 +314,13 @@ void jconf::cpuid(uint32_t eax, int32_t ecx, int32_t val[4])
 #ifdef _WIN32
 	__cpuidex(val, eax, ecx);
 #else
-	__cpuid_count(eax, ecx, (unsigned int*)&val[0], (unsigned int*)&val[1], (unsigned int*)&val[2], (unsigned int*)&val[3]);
+	// Use temporary unsigned int variables for __cpuid_count
+	unsigned int a, b, c, d;
+	__cpuid_count(eax, ecx, &a, &b, &c, &d);
+	val[0] = (int32_t)a;
+	val[1] = (int32_t)b;
+	val[2] = (int32_t)c;
+	val[3] = (int32_t)d;
 #endif
 }
 
