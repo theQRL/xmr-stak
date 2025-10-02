@@ -480,7 +480,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
 endif()
 
 # Check for ARM architecture and disable CryptonightR optimizations
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm.*|aarch64.*)")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64|arm|armv7l|armhf)$")
     message(STATUS "ARM architecture detected - disabling CryptonightR optimizations")
     add_definitions(-DDISABLE_CRYPTONIGHTR)
     add_definitions(-DDISABLE_ASM)
@@ -566,6 +566,11 @@ else()
             "xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.S"
             "xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.S"
         )
+        # Set the include directory for assembly files so .include directives work
+        set_property(SOURCE "xmrstak/backend/cpu/crypto/asm/cryptonight_v8_main_loop.S" 
+                     PROPERTY COMPILE_FLAGS "-I${CMAKE_SOURCE_DIR}/xmrstak/backend/cpu/crypto/asm")
+        set_property(SOURCE "xmrstak/backend/cpu/crypto/asm/cnR/CryptonightR_template.S" 
+                     PROPERTY COMPILE_FLAGS "-I${CMAKE_SOURCE_DIR}/xmrstak/backend/cpu/crypto/asm/cnR")
     endif()
 endif()
 
